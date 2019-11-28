@@ -1,0 +1,28 @@
+<idea-plugin>
+    <id>com.beaverkilla.generateeverythingplugin</id>
+    <name>Generate everything</name>
+    <vendor email="jack@darvaltech.com" url="https://beaverkilla.com">Jack Lever</vendor>
+
+    <description><![CDATA[
+    This will generate 3 constructors (empty, super and full), all getters and setters and toString methods.<br>
+    ]]></description>
+
+    <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
+         on how to target different products -->
+    <!-- uncomment to enable plugin in all products
+    <depends>com.intellij.modules.lang</depends>
+    -->
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Add your extensions here -->
+    </extensions>
+
+    <actions>
+        <action id="org.intellij.plugins.generateeverything.GenerateAction"
+                class="org.intellij.plugins.generateeverything.GenerateAction" text="Generate Everything"
+                description="This will generate 2 or 3 constructors (no args, super &amp; all), get/set and tostring">
+            <add-to-group group-id="GenerateGroup" anchor="first"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="shift ctrl G"/>
+        </action>
+    </actions>
+</idea-plugin>
