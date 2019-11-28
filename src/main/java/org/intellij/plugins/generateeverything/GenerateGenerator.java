@@ -56,27 +56,27 @@ public class GenerateGenerator implements Runnable {
         }
         final Set<GenerateOption> options = currentOptions();
 
-        PsiElement lastAddedElement = targetClass.getLastChild();
+        PsiElement lastAddedElement = null;
 
         if (options.contains(GenerateOption.SUPER_CONSTRUCTOR)) {
             lastAddedElement = addMethod(targetClass,
                                          null,
                                          generateSuperConstructor(targetClass),
-                                         false);
+                                         true);
         }
 
         if (options.contains(GenerateOption.EMPTY_CONSTRUCTOR)) {
             lastAddedElement = addMethod(targetClass,
                                          lastAddedElement,
                                          generateEmptyConstructor(targetClass),
-                                         false);
+                                         true);
         }
 
         if (options.contains(GenerateOption.ALL_ARGS_CONSTRUCTOR)) {
             lastAddedElement = addMethod(targetClass,
                                          lastAddedElement,
                                          generateConstructor(targetClass),
-                                         false);
+                                         true);
         }
 
         PsiField[] fields = targetClass.getFields();
@@ -85,22 +85,16 @@ public class GenerateGenerator implements Runnable {
         while (iterator.hasNext()) {
             PsiField field = iterator.next();
             if (options.contains(GenerateOption.GETTERS)) {
-                lastAddedElement = addMethod(targetClass,
-                                             lastAddedElement,
-                                             addGetter(field),
-                                             false);
+                lastAddedElement = addMethod(targetClass, lastAddedElement, addGetter(field), true);
             }
 
             if (options.contains(GenerateOption.SETTERS)) {
-                lastAddedElement = addMethod(targetClass,
-                                             lastAddedElement,
-                                             addSetter(field),
-                                             false);
+                lastAddedElement = addMethod(targetClass, lastAddedElement, addSetter(field), true);
             }
         }
 
         if (options.contains(GenerateOption.TO_STRING)) {
-            addMethod(targetClass, lastAddedElement, addToString(targetClass), false);
+            addMethod(targetClass, lastAddedElement, addToString(targetClass), true);
         }
 
         JavaCodeStyleManager.getInstance(project).shortenClassReferences(file);
@@ -115,37 +109,51 @@ public class GenerateGenerator implements Runnable {
         modifierList.setModifierProperty(PsiModifier.PUBLIC, true);
         modifierList.addAnnotation("java.lang.Override");
 
+        // This tostring method needs to contain :
+        // return "<class name>{"
         StringBuilder assignText = new StringBuilder("return \"" + targetClass.getName() + "{");
 
-        if (targetClass.getSuperClass() != null) {
-            assignText.append("{\" + super.toString() + " + "\"}");
+        // If there's a super method
+        // {<super.toString()>},<space>
+        if (targetClass.getSuperClass() != null
+            && targetClass.getSuperClass().getFields().length > 0) {
+            assignText.append("{\" + super.toString() + " + "\"}, ");
         }
 
+        // If there's fields in the class, assign each one, otherwise just end with }";
         if (targetClass.getFields().length > 0) {
-            assignText.append(", \"");
+
+            // This needs to assign each field as name=value with single quotes if it's a string
+            // name='bob', age=200, isFat=true, dob=1900-01-01T03:50:12.0000000T
             for (PsiField field : targetClass.getFields()) {
-                assignText.append(" + \"")
+                assignText.append("\"\n + \"")
                           .append(field.getName())
                           .append("=")
-                          .append("\"")
                           .append(field.getType()
                                        .getCanonicalText()
-                                       .equals(CommonClassNames.JAVA_LANG_STRING)
-                                  ? "\'"
-                                  : "")
+                                       .equals(CommonClassNames.JAVA_LANG_STRING) ? "\'" : "")
                           .append("\" + ")
                           .append(field.getName())
                           .append(" + \"")
-                          .append(field.getType().getCanonicalText().equals(CommonClassNames.JAVA_LANG_STRING) ? "\'" : "")
-                          .append(", \" + ");
+                          .append(field.getType()
+                                       .getCanonicalText()
+                                       .equals(CommonClassNames.JAVA_LANG_STRING) ? "\'" : "")
+                          .append(", ");
             }
-        } else {
+            // Delete the last two chars which should be <comma><space>
+            assignText.deleteCharAt(assignText.length() - 1);
+            assignText.deleteCharAt(assignText.length() - 1);
 
+            // Then add the terminating brace and semi-colon
+            assignText.append("}\";");
+        }
+        else {
+            // Nothing in class so just add the brace and semi-colon
+            assignText.append("+ \"}\";");
         }
 
-        assignText = new StringBuilder(assignText.substring(0, assignText.length() - 2) + "+\"}\"");
-
-        toStringMethod.getBody().add(psiElementFactory.createStatementFromText(assignText.toString(), null));
+        toStringMethod.getBody()
+                      .add(psiElementFactory.createStatementFromText(assignText.toString(), null));
         return toStringMethod;
     }
 
@@ -172,7 +180,7 @@ public class GenerateGenerator implements Runnable {
         PsiMethod getMethod = psiElementFactory.createMethod(
                 "get" + toUpperSnakeCase(field.getName()), field.getType());
         getMethod.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
-        String assignText = "return " + toLowerSnakeCase(field.getName()) + ";";
+        String assignText = "return this." + toLowerSnakeCase(field.getName()) + ";";
         getMethod.getBody().add(psiElementFactory.createStatementFromText(assignText, null));
         return getMethod;
     }

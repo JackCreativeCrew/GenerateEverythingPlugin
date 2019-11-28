@@ -29,15 +29,8 @@ public final class GenerateOptionCollector {
 
         final List<PsiFieldMember> allFields = new ArrayList<PsiFieldMember>();
 
-        PsiClass classToExtractFieldsFrom = clazz;
-        while (classToExtractFieldsFrom != null) {
-            final List<PsiFieldMember> classFieldMembers = collectFieldsInClass(element,
-                                                                                clazz,
-                                                                                classToExtractFieldsFrom);
-            allFields.addAll(0, classFieldMembers);
-
-            classToExtractFieldsFrom = classToExtractFieldsFrom.getSuperClass();
-        }
+        final List<PsiFieldMember> classFieldMembers = collectFieldsInClass(element, clazz, clazz);
+        allFields.addAll(0, classFieldMembers);
 
         return allFields;
     }
