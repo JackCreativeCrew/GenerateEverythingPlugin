@@ -5,6 +5,7 @@ import com.intellij.codeInsight.generation.PsiFieldMember;
 import com.intellij.lang.LanguageCodeInsightActionHandler;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.EditorModificationUtil;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiDocumentManager;
@@ -51,7 +52,7 @@ public class GenerateHandler implements LanguageCodeInsightActionHandler {
 
         psiDocumentManager.commitDocument(currentDocument);
 
-        if (!CodeInsightUtilBase.prepareEditorForWrite(editor)) {
+        if (!EditorModificationUtil.checkModificationAllowed(editor)) {
             return;
         }
 
