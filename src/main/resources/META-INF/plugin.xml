@@ -17,6 +17,8 @@
         <!-- Add your extensions here -->
     </extensions>
 
+    <depends>com.intellij.modules.java</depends>
+
     <actions>
         <action id="org.intellij.plugins.generateeverything.GenerateAction"
                 class="org.intellij.plugins.generateeverything.GenerateAction" text="Generate Everything"
