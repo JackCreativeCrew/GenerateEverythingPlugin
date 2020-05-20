@@ -4,6 +4,7 @@ import com.intellij.codeInsight.generation.PsiFieldMember;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.lang.jvm.JvmModifier;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
@@ -11,6 +12,7 @@ import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -19,6 +21,8 @@ import static org.intellij.plugins.generateeverything.GenerateUtils.toLowerSnake
 import static org.intellij.plugins.generateeverything.GenerateUtils.toUpperSnakeCase;
 
 public class GenerateGenerator implements Runnable {
+
+    private static final Logger LOGGER = Logger.getInstance(GenerateGenerator.class);
 
     private final Project project;
 
@@ -56,23 +60,37 @@ public class GenerateGenerator implements Runnable {
         }
         final Set<GenerateOption> options = currentOptions();
 
+        String targetClassName = targetClass.getName();
+        LOGGER.trace("Operating on class : " + targetClassName +".");
+
         PsiElement lastAddedElement = null;
 
-        if (options.contains(GenerateOption.SUPER_CONSTRUCTOR)) {
+        if (options.contains(GenerateOption.EMPTY_CONSTRUCTOR)) {
+            LOGGER.trace("Adding empty constructor.");
+
             lastAddedElement = addMethod(targetClass,
                                          null,
-                                         generateSuperConstructor(targetClass),
-                                         true);
-        }
-
-        if (options.contains(GenerateOption.EMPTY_CONSTRUCTOR)) {
-            lastAddedElement = addMethod(targetClass,
-                                         lastAddedElement,
                                          generateEmptyConstructor(targetClass),
                                          true);
         }
 
+        if (options.contains(GenerateOption.SUPER_CONSTRUCTOR)
+            && targetClass.getSuperClass() != null
+            && !CommonClassNames.JAVA_LANG_OBJECT.equals(targetClass.getSuperClass().getQualifiedName())) {
+
+            LOGGER.info("Generating super constructor(s).");
+
+            PsiMethod newMethod = generateSuperConstructor(targetClass);
+            LOGGER.trace("Has super - adding constructor : "+newMethod+".");
+            lastAddedElement = addMethod(targetClass,
+                                         lastAddedElement,
+                                         newMethod,
+                                         true);
+        }
+
         if (options.contains(GenerateOption.ALL_ARGS_CONSTRUCTOR)) {
+            LOGGER.trace("Adding all args constructor.");
+
             lastAddedElement = addMethod(targetClass,
                                          lastAddedElement,
                                          generateConstructor(targetClass),
@@ -80,10 +98,9 @@ public class GenerateGenerator implements Runnable {
         }
 
         PsiField[] fields = targetClass.getFields();
-        List<PsiField> psiFields = Arrays.asList(fields);
-        Iterator<PsiField> iterator = psiFields.iterator();
-        while (iterator.hasNext()) {
-            PsiField field = iterator.next();
+        for (PsiField field : fields) {
+            LOGGER.trace("Adding get/set for : "+field.getName()+".");
+
             if (options.contains(GenerateOption.GETTERS)) {
                 lastAddedElement = addMethod(targetClass, lastAddedElement, addGetter(field), true);
             }
@@ -94,11 +111,14 @@ public class GenerateGenerator implements Runnable {
         }
 
         if (options.contains(GenerateOption.TO_STRING)) {
+            LOGGER.trace("Adding tostring.");
             addMethod(targetClass, lastAddedElement, addToString(targetClass), true);
         }
 
         JavaCodeStyleManager.getInstance(project).shortenClassReferences(file);
         CodeStyleManager.getInstance(project).reformat(targetClass);
+
+        LOGGER.trace("Generation complete for class : "+targetClassName+".");
     }
 
     private PsiMethod addToString(PsiClass targetClass) {
@@ -238,12 +258,18 @@ public class GenerateGenerator implements Runnable {
 
         List<PsiMethod> psiMethods = Arrays.asList(targetClass.getSuperClass().getConstructors());
         psiMethods.sort(Comparator.comparingInt(o -> o.getParameterList().getParametersCount()));
-        PsiMethod longestSuperCon = psiMethods.get(psiMethods.size() - 1);
-        PsiParameterList parameterList = longestSuperCon.getParameterList();
+        List<PsiParameter> constructorParams = new ArrayList<>();
 
-        List<PsiParameter> constructorParams = Arrays.stream(parameterList.getParameters()).filter(
-                pl -> !pl.hasModifier(JvmModifier.PRIVATE)).collect(Collectors.toList());
-        constructorParams.forEach(cp -> constructor.getParameterList().add(cp));
+        if (!psiMethods.isEmpty()) {
+            PsiMethod longestSuperCon = psiMethods.get(psiMethods.size() - 1);
+            PsiParameterList parameterList = longestSuperCon.getParameterList();
+
+            constructorParams = Arrays.stream(parameterList.getParameters()).filter(
+                    pl -> !pl.hasModifier(JvmModifier.PRIVATE)).collect(Collectors.toList());
+            constructorParams.forEach(cp -> constructor.getParameterList().add(cp));
+        } else {
+            LOGGER.trace("Super has no visible methods or constructors v0v.");
+        }
 
         String superText =
                 "super(" + constructorParams.stream().map(PsiNamedElement::getName).collect(
@@ -267,20 +293,22 @@ public class GenerateGenerator implements Runnable {
         PsiClass superClass = targetClass.getSuperClass();
         if (superClass != null) {
             List<PsiMethod> psiMethods = Arrays.asList(superClass.getConstructors());
-            psiMethods.sort(Comparator.comparingInt(o -> o.getParameterList()
-                                                          .getParametersCount()));
-            PsiMethod longestSuperCon = psiMethods.get(psiMethods.size() - 1);
-            PsiParameterList parameterList = longestSuperCon.getParameterList();
+            if (psiMethods.size() > 0) {
+                psiMethods.sort(Comparator.comparingInt(o -> o.getParameterList()
+                                                              .getParametersCount()));
+                PsiMethod longestSuperCon = psiMethods.get(psiMethods.size() - 1);
+                PsiParameterList parameterList = longestSuperCon.getParameterList();
 
-            List<PsiParameter> constructorParams =
-                    Arrays.stream(parameterList.getParameters()).filter(pl -> !pl.hasModifier(
-                            JvmModifier.PRIVATE)).collect(Collectors.toList());
-            constructorParams.forEach(cp -> constructor.getParameterList().add(cp));
+                List<PsiParameter> constructorParams =
+                        Arrays.stream(parameterList.getParameters()).filter(pl -> !pl.hasModifier(
+                                JvmModifier.PRIVATE)).collect(Collectors.toList());
+                constructorParams.forEach(cp -> constructor.getParameterList().add(cp));
 
-            String superText =
-                    "super(" + constructorParams.stream().map(PsiNamedElement::getName).collect(
-                            Collectors.joining(", ")) + ");";
-            conBody.add(psiElementFactory.createStatementFromText(superText, null));
+                String superText =
+                        "super(" + constructorParams.stream().map(PsiNamedElement::getName).collect(
+                                Collectors.joining(", ")) + ");";
+                conBody.add(psiElementFactory.createStatementFromText(superText, null));
+            }
         }
 
         for (final PsiFieldMember fieldMember : selectedFields) {
