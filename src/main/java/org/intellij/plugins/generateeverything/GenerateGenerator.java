@@ -12,7 +12,6 @@ import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -53,7 +52,8 @@ public class GenerateGenerator implements Runnable {
         psiElementFactory = JavaPsiFacade.getInstance(project).getElementFactory();
     }
 
-    @Override public void run() {
+    @Override
+    public void run() {
         final PsiClass targetClass = GenerateUtils.getStaticOrTopLevelClass(file, editor);
         if (targetClass == null) {
             return;
@@ -74,27 +74,69 @@ public class GenerateGenerator implements Runnable {
                                          true);
         }
 
-        if (options.contains(GenerateOption.SUPER_CONSTRUCTOR)
-            && targetClass.getSuperClass() != null
-            && !CommonClassNames.JAVA_LANG_OBJECT.equals(targetClass.getSuperClass().getQualifiedName())) {
+        if (options.contains(GenerateOption.SUPER_ARGS_CONSTRUCTOR)) {
+            LOGGER.trace("Adding super constructor.");
 
-            LOGGER.info("Generating super constructor(s).");
+            PsiMethod superConstructor = generateSuperConstructor(targetClass);
+            if (superConstructor != null) {
+                LOGGER.trace("Has super - adding constructor : " + superConstructor + ".");
+                lastAddedElement = addMethod(targetClass,
+                                             lastAddedElement,
+                                             superConstructor,
+                                             true);
+            } else {
+                LOGGER.trace("Super constructor returned null - skipping.");
+            }
+        }
 
-            PsiMethod newMethod = generateSuperConstructor(targetClass);
-            LOGGER.trace("Has super - adding constructor : "+newMethod+".");
-            lastAddedElement = addMethod(targetClass,
-                                         lastAddedElement,
-                                         newMethod,
-                                         true);
+        if (options.contains(GenerateOption.SUPER_OBJECT_CONSTRUCTOR)) {
+            LOGGER.trace("Adding super object constructor.");
+
+            PsiMethod superObjConstructor = generateSuperObjectConstructor(targetClass);
+            if (superObjConstructor != null) {
+                LOGGER.trace("Has super - adding object constructor : " + superObjConstructor + ".");
+                lastAddedElement = addMethod(targetClass,
+                                             lastAddedElement,
+                                             superObjConstructor,
+                                             true);
+            } else {
+                LOGGER.trace("Super object constructor returned null - skipping.");
+            }
         }
 
         if (options.contains(GenerateOption.ALL_ARGS_CONSTRUCTOR)) {
             LOGGER.trace("Adding all args constructor.");
 
-            lastAddedElement = addMethod(targetClass,
-                                         lastAddedElement,
-                                         generateConstructor(targetClass),
-                                         true);
+            PsiMethod allArgsConstructor = genAllArgsConstr(targetClass);
+            if (allArgsConstructor != null) {
+                LOGGER.trace("Has all args - adding constructor : " + allArgsConstructor + ".");
+                lastAddedElement = addMethod(targetClass,
+                                             lastAddedElement,
+                                             allArgsConstructor,
+                                             true);
+            } else {
+                LOGGER.trace("All args constructor returned null - skipping.");
+            }
+        }
+
+        if (options.contains(GenerateOption.ALL_ARGS_SUPER_CONSTRUCTOR)
+            && targetClass.getSuperClass() != null
+            && !CommonClassNames.JAVA_LANG_OBJECT.equals(targetClass.getSuperClass().getQualifiedName())) {
+
+            LOGGER.info("Generating all args super constructor(s).");
+
+            PsiMethod allArgsSuperConstructor = generateAllArgsSuperConstructor(targetClass);
+            if (allArgsSuperConstructor != null) {
+                LOGGER.trace("Has all args super - adding constructor : " + allArgsSuperConstructor + ".");
+                try {
+                    lastAddedElement = addMethod(targetClass, lastAddedElement, allArgsSuperConstructor, true);
+                } catch (Exception e) {
+                    LOGGER.error("Exception thrown : " + e);
+                    e.printStackTrace();
+                }
+            } else {
+                LOGGER.trace("All args super constructor returned null - skipping.");
+            }
         }
 
         PsiField[] fields = targetClass.getFields();
@@ -102,11 +144,11 @@ public class GenerateGenerator implements Runnable {
             LOGGER.trace("Adding get/set for : "+field.getName()+".");
 
             if (options.contains(GenerateOption.GETTERS)) {
-                lastAddedElement = addMethod(targetClass, lastAddedElement, addGetter(field), true);
+                lastAddedElement = addMethod(targetClass, lastAddedElement, generateGetter(field), true);
             }
 
             if (options.contains(GenerateOption.SETTERS)) {
-                lastAddedElement = addMethod(targetClass, lastAddedElement, addSetter(field), true);
+                lastAddedElement = addMethod(targetClass, lastAddedElement, generateSetter(field), true);
             }
         }
 
@@ -177,13 +219,22 @@ public class GenerateGenerator implements Runnable {
         return toStringMethod;
     }
 
-    @Override public String toString() {
+    @Override
+    public String toString() {
         return "GenerateGenerator{" + "project=" + project + ", file=" + file + ", editor=" + editor
                + ", selectedFields=" + selectedFields + ", psiElementFactory=" + psiElementFactory
                + '}';
     }
 
-    private PsiMethod addSetter(PsiField field) {
+    /**
+     * Add a single setter for a field.
+     *
+     * @param field the field to add the setter for.
+     * @return a setter taking the argument with the field's type and setting this.field.
+     */
+    private PsiMethod generateSetter(PsiField field) {
+        LOGGER.trace("Generating setter for : " + field.getName());
+
         PsiMethod setMethod = psiElementFactory.createMethod(
                 "set" + toUpperSnakeCase(field.getName()), PsiType.VOID);
         setMethod.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
@@ -196,7 +247,15 @@ public class GenerateGenerator implements Runnable {
         return setMethod;
     }
 
-    private PsiMethod addGetter(PsiField field) {
+    /**
+     * Add a single getter for a field.
+     *
+     * @param field the field to add the getter for.
+     * @return a getter returning this.field.
+     */
+    private PsiMethod generateGetter(PsiField field) {
+        LOGGER.trace("Generating getter for : " + field.getName());
+
         PsiMethod getMethod = psiElementFactory.createMethod(
                 "get" + toUpperSnakeCase(field.getName()), field.getType());
         getMethod.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
@@ -205,17 +264,28 @@ public class GenerateGenerator implements Runnable {
         return getMethod;
     }
 
-    private PsiMethod generateEmptyConstructor(final PsiClass targetClass) {
-        final PsiMethod constructor = psiElementFactory.createConstructor(targetClass.getName());
-        constructor.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
-        return constructor;
-    }
-
+    /**
+     * Add a method to the existing PSI Tree. If this has an existing method overwrite it, if there is no existing
+     * method, create a new one, placing it after the parameter after otherwise just adding it.
+     *
+     * @param target the target class to operate on.
+     * @param after the target element to attempt to add the new method after (either an existing element or null).
+     * @param newMethod the new method to add.
+     * @param replace whether or not to replace existing elements, if this is false and a method already exists, the
+     *                new method WILL NOT be added.
+     *
+     * @return the element as modified.
+     */
     private PsiElement addMethod(@NotNull final PsiClass target,
                                  @Nullable final PsiElement after,
                                  @NotNull final PsiMethod newMethod,
                                  final boolean replace) {
+        LOGGER.trace("Adding method to target : " + target.getName());
+
+        // Get the existing method if it exists.
         PsiMethod existingMethod = target.findMethodBySignature(newMethod, false);
+
+        // If there's no existing method and the new method is a constructor, set this to be the constructor
         if (existingMethod == null && newMethod.isConstructor()) {
             for (final PsiMethod constructor : target.getConstructors()) {
                 if (GenerateUtils.areParameterListsEqual(constructor.getParameterList(),
@@ -225,6 +295,9 @@ public class GenerateGenerator implements Runnable {
                 }
             }
         }
+
+        // If the existing method is null, add this method after the after element, if there's no after element just
+        // add it to the tree.
         if (existingMethod == null) {
             if (after != null) {
                 return target.addAfter(newMethod, after);
@@ -233,12 +306,19 @@ public class GenerateGenerator implements Runnable {
                 return target.add(newMethod);
             }
         }
+        // Otherwise replace the method
         else if (replace) {
             existingMethod.replace(newMethod);
         }
+
+        // Return the new tree
         return existingMethod;
     }
 
+    /**
+     * Get enable options for generation.
+     * @return a list of the enums that have been set.
+     */
     private static EnumSet<GenerateOption> currentOptions() {
         final EnumSet<GenerateOption> options = EnumSet.noneOf(GenerateOption.class);
         final PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
@@ -252,29 +332,223 @@ public class GenerateGenerator implements Runnable {
         return options;
     }
 
-    private PsiMethod generateSuperConstructor(final PsiClass targetClass) {
+    /**
+     * Generate an empty constructor with no arguments and no super to allow new class();.
+     *
+     * @param targetClass the target class to generate for.
+     * @return the empty constructor.
+     */
+    private PsiMethod generateEmptyConstructor(final PsiClass targetClass) {
         final PsiMethod constructor = psiElementFactory.createConstructor(targetClass.getName());
-        constructor.getModifierList().setModifierProperty(PsiModifier.PRIVATE, true);
+        constructor.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
+        LOGGER.trace("Adding constructor :\r\n" + constructor.getText());
+        return constructor;
+    }
 
+    /**
+     * Generate a super constructor with no other arguments.
+     *
+     * @param targetClass the target class to generate a super constructor for.
+     * @return the super constructor all args method.
+     */
+    private PsiMethod generateSuperConstructor(final PsiClass targetClass) {
+        // Initial sanity checks
+        if (targetClass == null
+            || targetClass.getName() == null
+            || targetClass.getSuperClass() == null) {
+            LOGGER.error("Failed to generate super, targetClass, class name or superclass is null " + targetClass);
+            return null;
+        }
+
+        LOGGER.trace("Generating a super constructor for : " + targetClass.getName());
+
+        // Create the constructor method and mark it as private?
+        final PsiMethod constructor = psiElementFactory.createConstructor(targetClass.getName());
+        constructor.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
+
+        // Get the super class' fields
         List<PsiMethod> psiMethods = Arrays.asList(targetClass.getSuperClass().getConstructors());
+
+        // Get the largest one (hopefully all fields)
         psiMethods.sort(Comparator.comparingInt(o -> o.getParameterList().getParametersCount()));
+
+        // Create a list of constructor parameters to add to for our constructor
         List<PsiParameter> constructorParams = new ArrayList<>();
 
+        // If there are super class constructor fields to add, do it
         if (!psiMethods.isEmpty()) {
+            // Get the largest constuctor
             PsiMethod longestSuperCon = psiMethods.get(psiMethods.size() - 1);
+            // Get the parameter list
             PsiParameterList parameterList = longestSuperCon.getParameterList();
 
-            constructorParams = Arrays.stream(parameterList.getParameters()).filter(
-                    pl -> !pl.hasModifier(JvmModifier.PRIVATE)).collect(Collectors.toList());
+            // If the fields aren't marked private, add them to our constructor as parameters
+            constructorParams = Arrays.stream(parameterList.getParameters())
+                                      .filter(pl -> !pl.hasModifier(JvmModifier.PRIVATE))
+                                      .collect(Collectors.toList());
             constructorParams.forEach(cp -> constructor.getParameterList().add(cp));
         } else {
+            // If there are no super constructor parameters just add an empty super
             LOGGER.trace("Super has no visible methods or constructors v0v.");
         }
 
+        // Create the super constructor and add it to the body before adding local parameters to constructor
         String superText =
-                "super(" + constructorParams.stream().map(PsiNamedElement::getName).collect(
-                        Collectors.joining(", ")) + ");";
+                "super(" + constructorParams.stream()
+                                            .map(PsiNamedElement::getName)
+                                            .collect(Collectors.joining(", ")) + ");";
+        if (constructor.getBody() == null) {
+            LOGGER.error("Failed to get null constructor body!");
+            return null;
+        }
         constructor.getBody().add(psiElementFactory.createStatementFromText(superText, null));
+
+        LOGGER.trace("Adding constructor :\r\n" + constructor.getText());
+
+        return constructor;
+    }
+
+    /**
+     * Generate a super constructor as a single object with no other arguments.
+     *
+     * @param targetClass the target class to generate a super constructor for.
+     * @return the super constructor all args method.
+     */
+    private PsiMethod generateSuperObjectConstructor(final PsiClass targetClass) {
+        // Initial sanity checks
+        if (targetClass == null
+            || targetClass.getName() == null
+            || targetClass.getSuperClass() == null
+            || targetClass.getSuperClass().getName() == null) {
+            LOGGER.error("Failed to generate super, targetClass, class name or superclass is null " + targetClass);
+            return null;
+        }
+        PsiClass superClass = targetClass.getSuperClass();
+
+        LOGGER.trace("Generating a single object super constructor for : " + targetClass.getName());
+
+        // If there are no object superclass constructors then don't attempt this
+        boolean hasObjectConstructor = Arrays.stream(superClass.getConstructors())
+                                             .map(PsiMethod::getParameterList)
+                                             .filter(pl -> pl.getParameters().length > 0)
+                                             .map(pl -> pl.getParameter(0))
+                                             .filter(Objects::nonNull)
+                                             .map(p -> p.getType().getCanonicalText())
+                                             .anyMatch(ct -> ct.equals(superClass.getQualifiedName()));
+        if (!hasObjectConstructor) {
+            LOGGER.trace("No object superclass constructor found, exiting.");
+            return null;
+        }
+
+        // Create the constructor method and mark it as public
+        final PsiMethod constructor = psiElementFactory.createConstructor(targetClass.getName());
+        constructor.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
+
+        // Get the super class
+        if (superClass.getName() == null) {
+            LOGGER.error("Failed to get super class.");
+            return null;
+        }
+
+        final PsiParameter conParam =
+                psiElementFactory.createParameter(toLowerSnakeCase(superClass.getName()),
+                                                  targetClass.getSuperTypes()[0]);
+        constructor.getParameterList().add(conParam);
+
+        // Add the single super class parameter
+        String superText =
+                "super(" + toLowerSnakeCase(superClass.getName()) + ");";
+        if (constructor.getBody() == null) {
+            LOGGER.error("Failed to get null constructor body!");
+            return null;
+        }
+        constructor.getBody().add(psiElementFactory.createStatementFromText(superText, null));
+
+        LOGGER.trace("Adding constructor :\r\n" + constructor.getText());
+
+        return constructor;
+    }
+
+    /**
+     * Generate a super constructor with all arguments.
+     *
+     * @param targetClass the target class to generate a super constructor for.
+     * @return the super constructor all args method.
+     */
+    private PsiMethod generateAllArgsSuperConstructor(final PsiClass targetClass) {
+        // Initial sanity checks
+        if (targetClass == null
+            || targetClass.getName() == null
+            || targetClass.getSuperClass() == null) {
+            LOGGER.error("Failed to generate super, targetClass, class name or superclass is null " + targetClass);
+            return null;
+        }
+
+        LOGGER.trace("Generating all args super constructor for : " + targetClass.getName());
+
+        // Create the constructor method and mark it as public
+        final PsiMethod constructor = psiElementFactory.createConstructor(targetClass.getName());
+        constructor.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
+
+        // Get the super class' fields
+        List<PsiMethod> psiMethods = Arrays.asList(targetClass.getSuperClass().getConstructors());
+
+        // Get the largest one (hopefully all fields)
+        psiMethods.sort(Comparator.comparingInt(o -> o.getParameterList().getParametersCount()));
+
+        // Create a list of constructor parameters to add to for our constructor
+        List<PsiParameter> constructorParams = new ArrayList<>();
+
+        // If there are super class constructor fields to add, do it
+        if (!psiMethods.isEmpty()) {
+            // Get the largest constuctor
+            PsiMethod longestSuperCon = psiMethods.get(psiMethods.size() - 1);
+            // Get the parameter list
+            PsiParameterList parameterList = longestSuperCon.getParameterList();
+
+            // If the fields aren't marked private, add them to our constructor as parameters
+            constructorParams = Arrays.stream(parameterList.getParameters())
+                                      .filter(pl -> !pl.hasModifier(JvmModifier.PRIVATE))
+                                      .collect(Collectors.toList());
+            constructorParams.forEach(cp -> constructor.getParameterList().add(cp));
+        } else {
+            // If there are no super constructor parameters just add an empty super
+            LOGGER.trace("Super has no visible methods or constructors v0v.");
+        }
+
+        // Create the super constructor and add it to the body before adding local parameters to constructor
+        String superText =
+                "super(" + constructorParams.stream()
+                                            .map(PsiNamedElement::getName)
+                                            .collect(Collectors.joining(", ")) + ");";
+        if (constructor.getBody() == null) {
+            LOGGER.error("Failed to get null constructor body!");
+            return null;
+        }
+        constructor.getBody().add(psiElementFactory.createStatementFromText(superText, null));
+
+        // Loop through local class fields and add them as params
+        for (final PsiFieldMember fieldMember : selectedFields) {
+            final PsiField field = fieldMember.getElement();
+
+            // Create the param and add it to the parameter list
+            final PsiParameter conParam =
+                    psiElementFactory.createParameter(toLowerSnakeCase(field.getName()),
+                                                      field.getType());
+            constructor.getParameterList().add(conParam);
+        }
+
+        // Add the local set statements for local fields
+        for (PsiFieldMember fieldMember : selectedFields) {
+            final PsiField field = fieldMember.getElement();
+
+            final String assignText =
+                    "this." + field.getName() + " = " + toLowerSnakeCase(field.getName()) + ";";
+            constructor.getBody().add(psiElementFactory.createStatementFromText(assignText, null));
+        }
+
+        LOGGER.trace("Adding constructor :\r\n" + constructor.getText());
+
         return constructor;
     }
 
@@ -285,31 +559,18 @@ public class GenerateGenerator implements Runnable {
      *
      * @return the all args constructor.
      */
-    private PsiMethod generateConstructor(final PsiClass targetClass) {
+    private PsiMethod genAllArgsConstr(final PsiClass targetClass) {
+        // Initial sanity checks
+        if (targetClass == null
+            || targetClass.getName() == null) {
+            LOGGER.error("Failed to generate all args, targetClass, class name is null " + targetClass);
+            return null;
+        }
+
+        LOGGER.trace("Generating all args constructor for : " + targetClass.getName());
+
         final PsiMethod constructor = psiElementFactory.createConstructor(targetClass.getName());
         constructor.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
-        PsiCodeBlock conBody = constructor.getBody();
-
-        PsiClass superClass = targetClass.getSuperClass();
-        if (superClass != null) {
-            List<PsiMethod> psiMethods = Arrays.asList(superClass.getConstructors());
-            if (psiMethods.size() > 0) {
-                psiMethods.sort(Comparator.comparingInt(o -> o.getParameterList()
-                                                              .getParametersCount()));
-                PsiMethod longestSuperCon = psiMethods.get(psiMethods.size() - 1);
-                PsiParameterList parameterList = longestSuperCon.getParameterList();
-
-                List<PsiParameter> constructorParams =
-                        Arrays.stream(parameterList.getParameters()).filter(pl -> !pl.hasModifier(
-                                JvmModifier.PRIVATE)).collect(Collectors.toList());
-                constructorParams.forEach(cp -> constructor.getParameterList().add(cp));
-
-                String superText =
-                        "super(" + constructorParams.stream().map(PsiNamedElement::getName).collect(
-                                Collectors.joining(", ")) + ");";
-                conBody.add(psiElementFactory.createStatementFromText(superText, null));
-            }
-        }
 
         for (final PsiFieldMember fieldMember : selectedFields) {
             final PsiField field = fieldMember.getElement();
@@ -325,8 +586,10 @@ public class GenerateGenerator implements Runnable {
 
             final String assignText =
                     "this." + field.getName() + " = " + toLowerSnakeCase(field.getName()) + ";";
-            conBody.add(psiElementFactory.createStatementFromText(assignText, null));
+            constructor.getBody().add(psiElementFactory.createStatementFromText(assignText, null));
         }
+
+        LOGGER.trace("Adding constructor :\r\n" + constructor.getText());
 
         return constructor;
     }

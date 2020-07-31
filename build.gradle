@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'com.beaverkilla'
-version '1.4'
+version '1.5'
 
 sourceCompatibility = 11
 targetCompatibility = 11
@@ -19,7 +19,7 @@ dependencies {
 
 // See https://github.com/JetBrains/gradle-intellij-plugin/
 intellij {
-    version '2020.1.1'
+    version '2020.2'
     plugins 'java'
 }
 
@@ -28,7 +28,10 @@ patchPluginXml {
       Initial Version.<br>
       New token cause I uploaded the last to github ... durr.<br>
       Fix some dependency problems with the plugin.<br>
-      Update the dependencies for intellij 2020.1.<br>
+      Update the dependencies for intellij 2020.1.
+      Update for 2020.2.
+      Added a super constructor with no args, all args.
+      Moved all args above super+all args.<br>
       """
 }
 

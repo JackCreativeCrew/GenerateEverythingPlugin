@@ -28,12 +28,24 @@ public class GenerateOptionSelector {
                                   .build());
         options.add(SelectorOption.newBuilder()
                                   .withCaption("Add a super constructor")
-                                  .withMnemonic('b')
+                                  .withMnemonic('d')
                                   .withToolTip("Generate a super constructor")
-                                  .withOption(GenerateOption.SUPER_CONSTRUCTOR)
+                                  .withOption(GenerateOption.SUPER_ARGS_CONSTRUCTOR)
                                   .build());
         options.add(SelectorOption.newBuilder()
-                                  .withCaption("Add an all args constructor")
+                                  .withCaption("Add a super object constructor")
+                                  .withMnemonic('d')
+                                  .withToolTip("Generate a super object constructor")
+                                  .withOption(GenerateOption.SUPER_OBJECT_CONSTRUCTOR)
+                                  .build());
+        options.add(SelectorOption.newBuilder()
+                                  .withCaption("Add an all args + super constructor")
+                                  .withMnemonic('b')
+                                  .withToolTip("Generate an all args super constructor")
+                                  .withOption(GenerateOption.ALL_ARGS_SUPER_CONSTRUCTOR)
+                                  .build());
+        options.add(SelectorOption.newBuilder()
+                                  .withCaption("All args without super")
                                   .withMnemonic('c')
                                   .withToolTip("Generate an all args constructor")
                                   .withOption(GenerateOption.ALL_ARGS_CONSTRUCTOR)
