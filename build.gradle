@@ -1,10 +1,10 @@
 plugins {
     id 'java'
-    id 'org.jetbrains.intellij' version '0.6.5'
+    id 'org.jetbrains.intellij' version '0.7.2'
 }
 
 group 'com.beaverkilla'
-version '1.6'
+version '1.7'
 
 sourceCompatibility = 11
 targetCompatibility = 11
@@ -19,7 +19,7 @@ dependencies {
 
 // See https://github.com/JetBrains/gradle-intellij-plugin/
 intellij {
-    version '2020.3'
+    version '2021.1'
     plugins 'java'
 }
 
@@ -33,6 +33,7 @@ patchPluginXml {
       Added a super constructor with no args, all args.<br>
       Moved all args above super+all args.<br>
       Update for 2020.3<br>
+      Update for 2021.1<br>
       """
 }
 
