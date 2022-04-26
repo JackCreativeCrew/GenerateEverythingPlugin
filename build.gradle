@@ -1,11 +1,10 @@
 plugins {
     id 'java'
-    id 'org.jetbrains.intellij' version '0.7.2'
+    id 'org.jetbrains.intellij' version '1.5.3'
 }
 
 group 'com.beaverkilla'
-version '1.7'
-
+version '2.1'
 sourceCompatibility = 11
 targetCompatibility = 11
 
@@ -14,17 +13,19 @@ repositories {
 }
 
 dependencies {
-    testCompile group: 'junit', name: 'junit', version: '4.12'
+//    testCompile group: 'junit', name: 'junit', version: '4.13.2'
+    // https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
 }
 
 // See https://github.com/JetBrains/gradle-intellij-plugin/
 intellij {
-    version '2021.1'
-    plugins 'java'
+    version = '2022.1'
+    plugins = ['java']
 }
 
 patchPluginXml {
-    changeNotes """
+    changeNotes = """
       Initial Version.<br>
       New token cause I uploaded the last to github ... durr.<br>
       Fix some dependency problems with the plugin.<br>
@@ -34,6 +35,9 @@ patchPluginXml {
       Moved all args above super+all args.<br>
       Update for 2020.3<br>
       Update for 2021.1<br>
+      Update for 2021.3<br>
+      More attempts to fix gradle because jetbrains did a dumm on their example file. Upgrade gradle to 7.4<br>
+      Update for 2022.1<br>
       """
 }
 
@@ -44,5 +48,5 @@ task showProps {
 }
 
 publishPlugin {
-    token intellijPublishToken
+    token = intellijPublishToken
 }
