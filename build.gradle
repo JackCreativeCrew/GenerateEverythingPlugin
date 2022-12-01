@@ -1,12 +1,12 @@
 plugins {
     id 'java'
-    id 'org.jetbrains.intellij' version '1.8.0'
+    id 'org.jetbrains.intellij' version '1.10.0'
 }
 
 group 'com.beaverkilla'
-version '2.2'
-sourceCompatibility = 11
-targetCompatibility = 11
+version '2.3'
+sourceCompatibility = 17
+targetCompatibility = 17
 
 repositories {
     mavenCentral()
@@ -20,7 +20,7 @@ dependencies {
 
 // See https://github.com/JetBrains/gradle-intellij-plugin/
 intellij {
-    version = '2022.2'
+    version = '2022.3'
     plugins = ['java']
 }
 
@@ -39,10 +39,11 @@ patchPluginXml {
       More attempts to fix gradle because jetbrains did a dumm on their example file. Upgrade gradle to 7.4<br>
       Update for 2022.1<br>
       Update for 2022.2/1.8.0, gradle 7.5.1, java 17 ready<br>
+      Update for 2022.3, requires java 17, gradle JVM 17 etc<br>
       """
 }
 
-task showProps {
+tasks.register('showProps') {
     doLast {
         println intellijPublishToken
     }
