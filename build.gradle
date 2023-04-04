@@ -1,10 +1,10 @@
 plugins {
     id 'java'
-    id 'org.jetbrains.intellij' version '1.10.0'
+    id 'org.jetbrains.intellij' version '1.13.3'
 }
 
 group 'com.beaverkilla'
-version '2.3'
+version '2.4'
 sourceCompatibility = 17
 targetCompatibility = 17
 
@@ -12,15 +12,9 @@ repositories {
     mavenCentral()
 }
 
-dependencies {
-//    testCompile group: 'junit', name: 'junit', version: '4.13.2'
-    // https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.0'
-}
-
 // See https://github.com/JetBrains/gradle-intellij-plugin/
 intellij {
-    version = '2022.3'
+    version = '2023.1'
     plugins = ['java']
 }
 
@@ -40,6 +34,7 @@ patchPluginXml {
       Update for 2022.1<br>
       Update for 2022.2/1.8.0, gradle 7.5.1, java 17 ready<br>
       Update for 2022.3, requires java 17, gradle JVM 17 etc<br>
+      Update for 2023.1, gradle 8.0.2
       """
 }
 
